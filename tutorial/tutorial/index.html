@@ -5,69 +5,55 @@
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 		<link type="text/css" rel="stylesheet" href="main.css">
-		<script src="https://code.jquery.com/jquery-3.7.0.min.js" integrity="sha256-2Pmvv0kuTBOenSvLm6bvfBSSHrUJ+3A7x6P5Ebd07/g=" crossorigin="anonymous"></script>
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 	</head>
 	<body>
 
 		<div id="content">
-
 			<div id="mySidenav" class="sidenav">
 				<a href="javascript:void(0)" class="closebtn" onclick="closeNav()">&times;</a>
-				<a class="ar-object" id="1" href="#">Item1</a>
-				<a class="ar-object" id="2" href="#">Item2</a>
-				<a class="ar-object" id="3" href="#">Item3</a>
-				<a class="ar-object" id="4" href="#">Item4</a>
+				<a class="ar-object" id="1" href="#">item_1</a>
+				<a class="ar-object" id="2" href="#">item_2</a>
+				<a class="ar-object" id="3" href="#">item_3</a>
+				<a class="ar-object" id="4" href="#">item_4</a>
 			</div>
-
+	
 			<div id="container" style="position: fixed;"></div>
-
-			
-			<span style="font-size:30px;cursor:pointer; position:absolute;" onclick="openNav()">&#9776; open</span>
-
+			  
+			<span style="font-size:30px;cursor:pointer;position: absolute;" onclick="openNav()">&#9776; open</span>
+		
 			<button type="button" id="place-button">PLACE</button>
-
 		</div>
 
-		  <script>
-		  function openNav() {
-			document.getElementById("mySidenav").style.width = "250px";
-		  }
-		  
-		  function closeNav() {
-			document.getElementById("mySidenav").style.width = "0";
-		  }
-		  </script>
-
-		<!-- Import maps polyfill -->
-		<!-- Remove this when import maps will be widely supported -->
-		<script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
-
-		<script type="importmap">
-			{
-				"imports": {
-					"three": "./build/three.module.js",
-					"three/addons/": "./jsm/"
-				}
+		<script>
+			function openNav() {
+			  document.getElementById("mySidenav").style.width = "250px";
+			}
+			
+			function closeNav() {
+			  document.getElementById("mySidenav").style.width = "0";
 			}
 		</script>
 
 		<script type="module">
 
-			import * as THREE from 'three';
-			import { ARButton } from 'three/addons/webxr/ARButton.js';
+			import * as THREE from './build/three.module.js';
+			import { ARButton } from './jsm/webxr/ARButton.js';
+			import { VRButton } from './jsm/webxr/VRButton.js';
+			//
+			import { OrbitControls } from './jsm/controls/OrbitControls.js';
+			import { GLTFLoader } from './jsm/loaders/GLTFLoader.js';
+			import { RGBELoader } from './jsm/loaders/RGBELoader.js';
+			import { RoughnessMipmapper } from './jsm/utils/RoughnessMipmapper.js';
 
-			import {OrbitControls} from './jsm/controls/OrbitControls.js';
-			import {GLTFLoader} from './jsm/loaders/GLTFLoader.js';
-			import {RGBELoader} from './jsm/loaders/RGBELoader.js';
+			var container;
+			var camera, scene, renderer;
+			var controller;
 
-			let container;
-			let camera, scene, renderer;
-			let controller;
+			var reticle, pmremGenerator, current_object, controls, isAR, envmap;
 
-			let reticle, pmremGenerator, current_object, controls, isAR, envmap;
-
-			let hitTestSource = null;
-			let hitTestSourceRequested = false;
+			var hitTestSource = null;
+			var hitTestSourceRequested = false;
 
 			init();
 			animate();
@@ -76,12 +62,18 @@
 				if(current_object != null){
 					scene.remove(current_object);
 				}
+
 				loadModel($(this).attr("id"));
 			});
 
 			$("#ARButton").click(function(){
 				current_object.visible = false;
 				isAR = true;
+			});
+
+			$("#VRButton").click(function(){
+				scene.background = envmap;
+				scene.position.z = -2;
 			});
 
 			$("#place-button").click(function(){
@@ -96,8 +88,9 @@
 			}
 
 			function loadModel(model){
+				
 				new RGBELoader()
-					.setDataType(THREE.HalfFloatType)
+					.setDataType(THREE.UnsignedByteType)
 					.setPath('textures/')
 					.load('photo_studio_01_1k.hdr', function(texture){
 
@@ -112,7 +105,7 @@
 						loader.load(model + ".glb", function(glb) {
 
 							current_object = glb.scene;
-							scene.add(current_object);	
+							scene.add(current_object);
 
 							arPlace();
 
@@ -122,11 +115,9 @@
 
 							controls.update();
 							render();
-
 						});
-
 					});
-			};
+			}
 
 			function init() {
 
@@ -134,6 +125,7 @@
 				document.getElementById("container").appendChild( container );
 
 				scene = new THREE.Scene();
+				window.scene = scene;
 
 				camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 0.001, 200 );
 
@@ -152,8 +144,6 @@
 				renderer.xr.enabled = true;
 				container.appendChild( renderer.domElement );
 
-				//
-
 				pmremGenerator = new THREE.PMREMGenerator(renderer);
 				pmremGenerator.compileEquirectangularShader();
 
@@ -165,6 +155,11 @@
 				controls.enableDamping = true;
 				controls.dampingFactor = 0.05;
 
+				//VR SETUP
+				document.body.appendChild(VRButton.createButton(renderer));
+
+				//AR SETUP
+
 				let options = {
 					requiredFeatures: ['hit-test'],
 					optionalFeatures: ['dom-overlay'],
@@ -175,9 +170,11 @@
 				document.body.appendChild( ARButton.createButton(renderer, options));
 
 				//document.body.appendChild( ARButton.createButton( renderer, { requiredFeatures: [ 'hit-test' ] } ) );
-		
+
+				//
+
 				reticle = new THREE.Mesh(
-					new THREE.RingGeometry( 0.15, 0.2, 32 ).rotateX( - Math.PI / 2 ),
+					new THREE.RingBufferGeometry( 0.15, 0.2, 32 ).rotateX( - Math.PI / 2 ),
 					new THREE.MeshBasicMaterial()
 				);
 				reticle.matrixAutoUpdate = false;
@@ -186,8 +183,44 @@
 
 				//
 
-				window.addEventListener( 'resize', onWindowResize );
+				window.addEventListener( 'resize', onWindowResize, false );
 
+				renderer.domElement.addEventListener('touchstart', function(e){
+					e.preventDefault();
+					touchDown=true;
+					touchX = e.touches[0].pageX;
+					touchY = e.touches[0].pageY;
+				}, false);
+
+				renderer.domElement.addEventListener('touchend', function(e){
+					e.preventDefault();
+					touchDown = false;
+				}, false);
+
+				renderer.domElement.addEventListener('touchmove', function(e){
+					e.preventDefault();
+					
+					if(!touchDown){
+						return;
+					}
+
+					deltaX = e.touches[0].pageX - touchX;
+					deltaY = e.touches[0].pageY - touchY;
+					touchX = e.touches[0].pageX;
+					touchY = e.touches[0].pageY;
+
+					rotateObject();
+
+				}, false);
+
+			}
+
+			var touchDown, touchX, touchY, deltaX, deltaY;
+
+			function rotateObject(){
+				if(current_object && reticle.visible){
+					current_object.rotation.y += deltaX / 100;
+				}
 			}
 
 			function onWindowResize() {
@@ -211,10 +244,10 @@
 
 			function render( timestamp, frame ) {
 
-				if ( frame ) {
+				if ( frame && isAR) {
 
-					const referenceSpace = renderer.xr.getReferenceSpace();
-					const session = renderer.xr.getSession();
+					var referenceSpace = renderer.xr.getReferenceSpace();
+					var session = renderer.xr.getSession();
 
 					if ( hitTestSourceRequested === false ) {
 
@@ -233,6 +266,8 @@
 							hitTestSourceRequested = false;
 							hitTestSource = null;
 
+							isAR = false;
+
 							reticle.visible = false;
 
 							var box = new THREE.Box3();
@@ -249,11 +284,11 @@
 
 					if ( hitTestSource ) {
 
-						const hitTestResults = frame.getHitTestResults( hitTestSource );
+						var hitTestResults = frame.getHitTestResults( hitTestSource );
 
 						if ( hitTestResults.length ) {
 
-							const hit = hitTestResults[ 0 ];
+							var hit = hitTestResults[ 0 ];
 
 							document.getElementById("place-button").style.display = "block";
 
