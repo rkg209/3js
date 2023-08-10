@@ -5,19 +5,24 @@
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 		<link type="text/css" rel="stylesheet" href="main.css">
+		<script src="https://code.jquery.com/jquery-3.7.0.min.js" integrity="sha256-2Pmvv0kuTBOenSvLm6bvfBSSHrUJ+3A7x6P5Ebd07/g=" crossorigin="anonymous"></script>
 	</head>
 	<body>
 
 		<div id="mySidenav" class="sidenav">
 			<a href="javascript:void(0)" class="closebtn" onclick="closeNav()">&times;</a>
-			<a href="#">Item1</a>
-			<a href="#">Item2</a>
-			<a href="#">Item3</a>
-			<a href="#">Item4</a>
+			<a class="ar-object" id="1" href="#">Item1</a>
+			<a class="ar-object" id="2" href="#">Item2</a>
+			<a class="ar-object" id="3" href="#">Item3</a>
+			<a class="ar-object" id="4" href="#">Item4</a>
 		  </div>
+
+		  <div id="container" style="position: fixed; background-color: rgb(0, 0, 0);"></div>
+
 		  
-		  <span style="font-size:30px;cursor:pointer" onclick="openNav()">&#9776; open</span>
+		  <span style="font-size:30px;cursor:pointer; position:absolute;" onclick="openNav()">&#9776; open</span>
 		  
+
 		  <script>
 		  function openNav() {
 			document.getElementById("mySidenav").style.width = "250px";
@@ -46,11 +51,15 @@
 			import * as THREE from 'three';
 			import { ARButton } from 'three/addons/webxr/ARButton.js';
 
+			import {OrbitControls} from './jsm/controls/OrbitControls.js';
+			import {GLTFLoader} from './jsm/loaders/GLTFLoader.js';
+			import {RGBELoader} from './jsm/loaders/RGBELoader.js';
+
 			let container;
 			let camera, scene, renderer;
 			let controller;
 
-			let reticle;
+			let reticle, pmremGenerator, current_object, controls, isAR, envmap;
 
 			let hitTestSource = null;
 			let hitTestSourceRequested = false;
@@ -58,18 +67,59 @@
 			init();
 			animate();
 
+			$(".ar-object").click(function(){
+				if(current_object != null){
+					scene.remove(current_object);
+				}
+				loadModel($(this).attr("id"));
+			});
+
+			function loadModel(model){
+				new RGBELoader()
+					.setDataType(THREE.UnsignedByteType)
+					.setPath('textures/')
+					.load('photo_studio_01_1k.hdr', function(texture){
+
+						envmap = pmremGenerator.fromEquirectangular(texture).texture;
+
+						scene.environment = envmap;
+						texture.dispose();
+						pmremGenerator.dispose();
+						render();
+
+						var loader = new GLTFLoader().setPath('3d/');
+						loader.load(model + ".glb", function(glb) {
+
+							current_object = glb.scene;
+							scene.add(current_object);	
+
+							var box = new THREE.Box3();
+							box.setFromObject(current_object);
+							box.center(controls.target);
+
+							controls.update();
+							render();
+
+						});
+
+					});
+			};
+
 			function init() {
 
 				container = document.createElement( 'div' );
-				document.body.appendChild( container );
+				document.getElementById("container").appendChild( container );
 
 				scene = new THREE.Scene();
 
-				camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 0.01, 20 );
+				camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 0.001, 200 );
 
-				const light = new THREE.HemisphereLight( 0xffffff, 0xbbbbff, 3 );
-				light.position.set( 0.5, 1, 0.25 );
-				scene.add( light );
+				var directionalLight = new THREE.DirectionalLight(0xdddddd, 1);
+				directionalLight.position.set(0, 0, 1).normalize();
+				scene.add(directionalLight);
+
+				var ambientLight = new THREE.AmbientLight(0x222222);
+				scene.add(ambientLight);
 
 				//
 
@@ -80,6 +130,17 @@
 				container.appendChild( renderer.domElement );
 
 				//
+
+				pmremGenerator = new THREE.PMREMGenerator(renderer);
+				pmremGenerator.compileEquirectangularShader();
+
+				controls = new OrbitControls(camera, renderer.domElement);
+				controls.addEventListener('change', render);
+				controls.minDistance = 2;
+				controls.maxDistance = 10;
+				controls.target.set(0, 0, -0.2);
+				controls.enableDamping = true;
+				controls.dampingFactor = 0.05;
 
 				document.body.appendChild( ARButton.createButton( renderer, { requiredFeatures: [ 'hit-test' ] } ) );
 
@@ -133,6 +194,8 @@
 			function animate() {
 
 				renderer.setAnimationLoop( render );
+				requestAnimationFrame(animate);
+				controls.update();
 
 			}
 
