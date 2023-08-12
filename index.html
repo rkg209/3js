@@ -83,7 +83,9 @@
 			});
 
 			$("#ARButton").click(function(){
-				current_object.visible = false;
+				if(current_object != null){
+					current_object.visible = false;
+				}
 			});
 
 			$("#place-button").click(function(){
